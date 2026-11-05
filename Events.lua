@@ -1,21 +1,28 @@
+local _, ns = ...
+
 local GoonTools = LibStub("AceAddon-3.0"):GetAddon("GoonTools")
 
 
-local registeredEvents = false
-local registeredComms = false
-
-
-function GoonTools:PLAYER_LOGIN()
-    --self:UnregisterEvent("PLAYER_LOGIN")
-
+function GoonTools:OnEnable()
     self.playerGUID = UnitGUID("player")
 
-    GoonTools:SetupGoonToolsEvents()
+    self:RegisterEvent("PLAYER_GUILD_UPDATE")
+    self:RegisterEvent("GUILD_ROSTER_UPDATE")
+    self:RegisterEvent("PARTY_INVITE_REQUEST")
+    self:RegisterEvent("CHAT_MSG_WHISPER")
+    self:RegisterEvent("PLAYER_LEVEL_UP")
+
+    self:RegisterComm(ns.COMM_PREFIX, "OnGoonToolsComm")
+
+    -- Nothing fills the roster at login unless someone asks for it.
+    if IsInGuild() then
+        self:RequestGuildRoster()
+    end
 end
 
 
-function GoonTools:PLAYER_LEVEL_UP(_, level)
-    if not GoonTools:GetDingScreenshot() then
+function GoonTools:PLAYER_LEVEL_UP()
+    if not self:GetDingScreenshot() then
         return
     end
 
@@ -26,39 +33,36 @@ function GoonTools:PLAYER_LEVEL_UP(_, level)
 end
 
 
-function GoonTools:PARTY_INVITE_REQUEST(_, name, _, _, _, _, _, inviterGUID)
-    if not GoonTools:GetPartyInvite() then
+function GoonTools:PARTY_INVITE_REQUEST(_, _, _, _, _, _, _, inviterGUID)
+    if not self:GetPartyInvite() then
         return
     end
 
-    if not IsGuildMember(inviterGUID) and self:GetGuildPartyInvite() then
-        return
-    end
-
-    for i = 1, 4 do
-        local popup = _G["StaticPopup" .. i]
-
-        if popup and popup:IsShown() then
-            if popup.which == "PARTY_INVITE" then
-                _G["StaticPopup" .. i .. "Button1"]:Click()
-
-                break
-            end
+    if self:GetGuildPartyInvite() then
+        if not inviterGUID or ns.IsSecret(inviterGUID) or not IsGuildMember(inviterGUID) then
+            return
         end
     end
+
+    AcceptGroup()
+
+    -- Mark the popup accepted first, or hiding it declines the invite.
+    local popup = StaticPopup_FindVisible and StaticPopup_FindVisible("PARTY_INVITE")
+
+    if popup then
+        popup.inviteAccepted = 1
+    end
+
+    StaticPopup_Hide("PARTY_INVITE")
 end
 
 
 function GoonTools:CHAT_MSG_WHISPER(_, text, playerName, _, _, _, _, _, _, _, _, _, guid)
-    if issecretvalue(text) or issecretvalue(playerName) or issecretvalue(guid) or IsRestricted() then
+    if not self:GetWhisperInvite() then
         return
     end
 
-    if not GoonTools:GetWhisperInvite() then
-        return
-    end
-
-    if not IsGuildMember(guid) and self:GetGuildWhisperInvite() then
+    if ns.IsSecret(text, playerName, guid) or ns.IsRestricted() then
         return
     end
 
@@ -66,113 +70,54 @@ function GoonTools:CHAT_MSG_WHISPER(_, text, playerName, _, _, _, _, _, _, _, _,
         return
     end
 
-    for _, keyword in ipairs(self.inviteKeywords) do
-        if keyword == GetKeyword(text) then
-            C_PartyInfo.InviteUnit(playerName)
-
-            break
-        end
+    if self:GetGuildWhisperInvite() and not (guid and IsGuildMember(guid)) then
+        return
     end
+
+    if not self.inviteKeywords[ns.GetKeyword(text)] then
+        return
+    end
+
+    if not ns.CanInvite() then
+        return
+    end
+
+    C_PartyInfo.InviteUnit(playerName)
 end
 
 
-function GoonTools:PLAYER_GUILD_UPDATE()
-    --self:Print("PLAYER_GUILD_UPDATE")
+function GoonTools:PLAYER_GUILD_UPDATE(_, unit)
+    if unit and unit ~= "player" then
+        return
+    end
 
-    self:SetupGoonToolsEvents()
+    if not IsInGuild() then
+        self:ResetGuildState()
+
+        return
+    end
+
+    -- Switched guilds: forget the old roster so the new one isn't "welcomed".
+    local guildName = GetGuildInfo("player")
+
+    if guildName and self.guildName and guildName ~= self.guildName then
+        self:ResetGuildState()
+    end
+
+    if not self.rosterInitialized then
+        self:RequestGuildRoster()
+    end
 end
 
 
 function GoonTools:GUILD_ROSTER_UPDATE()
-    --self:Print("GUILD_ROSTER_UPDATE: " .. tostring(self.rosterInitialized))
-
-    if IsRestricted() then
+    if not IsInGuild() or ns.IsRestricted() then
         return
     end
 
     if self.rosterInitialized then
-        -- Check roster for changes, defer updating levels.
         self:UpdateGuildRoster()
-
-        -- Check members if they leveled up
-        self:CheckLevelUp()
-
-        if registeredComms and registeredEvents then
-            -- Broadcast registration
-            self:SendCommMessage(
-                "GT_REG",
-                self.playerGUID,
-                "GUILD"
-            )
-        else
-            self:RegisterCommsDeferred()
-        end
     else
         self:InitializeRoster()
-    end
-end
-
-
-function GoonTools:RegisterCommsDeferred()
-    -- TODO: Why is this not registered when a player has just joined a guild?
-    self:RegisterComm("GT_REG", "OnGoonToolsRegister")
-end
-
-
-function GoonTools:SetupGoonToolsEvents()
-    --self:Print("SetupGoonToolsEvents:" .. tostring(IsInGuild()))
-
-    self:RegisterEvent("PLAYER_GUILD_UPDATE")
-    self:RegisterEvent("PARTY_INVITE_REQUEST")
-    self:RegisterEvent("CHAT_MSG_WHISPER")
-    self:RegisterEvent("PLAYER_LEVEL_UP")
-
-    if IsInGuild() then
-        self:CreateGuildEvents()
-    else
-        self:DestroyGuildEvents()
-    end
-end
-
-
-function GoonTools:CreateGuildEvents()
-    if not registeredEvents then
-        --self:Print("CreateGuildEvents")
-
-        self:RegisterEvent("GUILD_ROSTER_UPDATE")
-
-        registeredEvents = true
-    end
-end
-
-
-function GoonTools:DestroyGuildEvents()
-    if registeredEvents then
-        --self:Print("DestroyGuildEvents")
-
-        self:UnregisterEvent("GUILD_ROSTER_UPDATE")
-
-        self:UnregisterComm("GT_REG")
-
-        registeredEvents = false
-    end
-end
-
-
-function GoonTools:OnCommReceived(...)
-    --self:Print("OnCommReceived")
-
-    for i = 1, select("#", ...) do
-        local value = select(i, ...)
-        self:Print(i .. ": " .. tostring(value))
-    end
-end
-
-
-function GoonTools:OnGoonToolsRegister(_, guid)
-    --self:Print("OnGoonToolsRegister")
-
-    if guid and self.rosterInitialized then
-        self.guildMembers[guid].addon = true
     end
 end

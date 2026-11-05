@@ -1,7 +1,24 @@
-local GoonTools = LibStub("AceAddon-3.0"):GetAddon("GoonTools")
+local _, ns = ...
 
 
-function IsRestricted()
+-- issecretvalue only exists on clients with the 12.x "secret values" system.
+local issecretvalue = issecretvalue or function()
+    return false
+end
+
+
+function ns.IsSecret(...)
+    for i = 1, select("#", ...) do
+        if issecretvalue((select(i, ...))) then
+            return true
+        end
+    end
+
+    return false
+end
+
+
+function ns.IsRestricted()
     local inInstance, instanceType = IsInInstance()
     local isPvP = inInstance and instanceType == "pvp"
 
@@ -9,27 +26,26 @@ function IsRestricted()
 end
 
 
-function GetKeyword(message)
-    if message ~= nil then
-        return message:lower():match("^%s*(.-)%s*$")
+function ns.GetKeyword(message)
+    if type(message) ~= "string" then
+        return nil
     end
 
-    return nil
+    return message:lower():match("^%s*(.-)%s*$")
 end
 
 
-function MatchKeyword(keyword, message)
-    if message ~= nil then
-        if not (message:lower():match("^%s*" .. keyword .. "%s*$") == nil) then
-            return true
-        end
+-- Drop the realm suffix where the client adds one.
+function ns.ShortName(name)
+    if Ambiguate and name then
+        return Ambiguate(name, "guild")
     end
 
-    return nil
+    return name
 end
 
 
-function CreateGuildMember(isOnline, name, level, zone)
+function ns.CreateGuildMember(isOnline, name, level, zone)
     return {
         online = isOnline,
         name = name,
@@ -40,8 +56,29 @@ function CreateGuildMember(isOnline, name, level, zone)
 end
 
 
-function FormatMessage(template, values)
+-- Replaces %n, %l, ... with values.n, values.l, ...; unknown keys are left as is.
+function ns.FormatMessage(template, values)
     return (template:gsub("%%([a-z])", function(key)
-        return tostring(values[key] or "%" .. key)
+        local value = values[key]
+
+        if value == nil then
+            return "%" .. key
+        end
+
+        return tostring(value)
     end))
+end
+
+
+function ns.IsGroupLeader()
+    return IsInGroup() and UnitIsGroupLeader("player")
+end
+
+
+function ns.CanInvite()
+    if not IsInGroup() then
+        return true
+    end
+
+    return UnitIsGroupLeader("player") or (IsInRaid() and UnitIsGroupAssistant("player"))
 end

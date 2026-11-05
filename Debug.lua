@@ -1,43 +1,39 @@
+local _, ns = ...
+
 local GoonTools = LibStub("AceAddon-3.0"):GetAddon("GoonTools")
 
 
+-- /gt names
 function GoonTools:DumpNames()
-    for k, v in pairs(self.guildMembers) do
-        if v.online then
-            self:Print(k .. " " .. tostring(v.name))
+    for guid, member in pairs(self.guildMembers) do
+        if member.online then
+            self:Print(guid .. " " .. tostring(member.name))
         end
     end
 end
 
 
+-- /gt levels [name]   (no name: all online members)
 function GoonTools:DumpLevels(value)
-    for k, v in pairs(self.guildMembers) do
-        ---local localizedClass, englishClass, localizedRace, englishRace, sex, name, realmName = GetPlayerInfoByGUID(k)
+    value = (value or ""):lower()
 
-        if v.name == value or (value == "" and v.online) then
-            self:Print(v.name .. " " .. k .. " " .. v.level)
+    for guid, member in pairs(self.guildMembers) do
+        local name = tostring(member.name)
+        local matches = name:lower() == value or tostring(ns.ShortName(member.name)):lower() == value
+
+        if matches or (value == "" and member.online) then
+            self:Print(name .. " " .. guid .. " " .. member.level)
         end
     end
 end
 
 
-function GoonTools:DumpZones()
-    for k, v in pairs(self.zoneNames) do
-        self:Print(k .. " " .. v)
+-- /gt peers
+function GoonTools:DumpPeers()
+    for guid in pairs(self.peers) do
+        local member = self.guildMembers[guid]
+        self:Print(guid .. " " .. tostring(member and member.name) .. (member and member.online and "" or " (offline)"))
     end
+
+    self:Print("Announcer: " .. (self:IsAnnouncer() and "you" or "someone else"))
 end
-
-
-function GoonTools:DumpAddon()
-    for k, v in pairs(self.guildMembers) do
-        if v.addon then
-            self:Print(k .. ": " .. tostring(v.addon))
-        end
-    end
-end
-
-
-GoonTools:RegisterChatCommand("gtdn", "DumpNames")
-GoonTools:RegisterChatCommand("gtdl", "DumpLevels")
-GoonTools:RegisterChatCommand("gtdz", "DumpZones")
-GoonTools:RegisterChatCommand("gtda", "DumpAddon")

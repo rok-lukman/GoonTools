@@ -2,14 +2,14 @@
 ## Title: GoonTools
 ## Notes: Goon Squad approved useless additions
 ## Author: sfjuocekr
-## Version: 0.0.2
+## Version: 0.0.3
 ## IconTexture: 136235
 ## SavedVariables: GoonToolsDB
 
 embeds.xml
 
+Helpers.lua
 GoonTools.lua
 GoonToolsUI.lua
 Events.lua
 Debug.lua
-Helpers.lua

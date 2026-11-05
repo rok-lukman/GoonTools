@@ -18,11 +18,15 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Create ZIP archive
+      - name: Stage addon folder
         run: |
-          zip -r "${RUNNER_TEMP}/GoonTools-${GITHUB_REF_NAME}.zip" . \
-            -x '*/.git*' '.git*' \
-            -x '*/.git*/**' '.git*/**'
+          mkdir -p "${RUNNER_TEMP}/GoonTools"
+          rsync -a --exclude='.git*' --exclude='.github' --exclude='Ace3/tests' ./ "${RUNNER_TEMP}/GoonTools/"
+          sed -i "s/^## Version:.*/## Version: ${GITHUB_REF_NAME#v}/" "${RUNNER_TEMP}/GoonTools/GoonTools.toc"
+
+      - name: Create ZIP archive
+        working-directory: ${{ runner.temp }}
+        run: zip -r "GoonTools-${GITHUB_REF_NAME}.zip" GoonTools
 
       - name: Create GitHub Release
         env:
